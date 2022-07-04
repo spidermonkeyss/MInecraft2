@@ -1,0 +1,245 @@
+﻿#pragma kernel CSMain
+
+#define TRUE 1
+#define FALSE 0
+
+struct BlockInfo
+{
+	int blockType;
+	float3 localChunkBlockPosition;
+};
+
+RWStructuredBuffer<float3> vertices;
+RWStructuredBuffer<float3> normals;
+RWStructuredBuffer<int> indices;
+RWStructuredBuffer<int> subMeshIndexCount;
+RWStructuredBuffer<BlockInfo> blockInfo;
+RWStructuredBuffer<BlockInfo> borderBlockInfo;
+
+//RWStructuredBuffer<BlockInfo> northBorderBlockInfo;
+//RWStructuredBuffer<BlockInfo> eastBorderBlockInfo;
+//RWStructuredBuffer<BlockInfo> southBorderBlockInfo;
+//RWStructuredBuffer<BlockInfo> westBorderBlockInfo;
+
+int minimum_opaque_block_number;
+int sizeOfChunk;
+int chunkHeight;
+int blocksCount;
+
+int GetIndexOfBlockUsingLocalPosition(float3 localPosition)
+{
+	if (localPosition.x < 0 || localPosition.x >= sizeOfChunk || localPosition.y < 0 || localPosition.y > chunkHeight || localPosition.z < 0 || localPosition.z >= sizeOfChunk)
+		return -1;
+
+	int index = (int)(localPosition.x) + ((int)localPosition.z * sizeOfChunk) + ((int)localPosition.y * (sizeOfChunk * sizeOfChunk));
+
+	return index;
+}
+
+int GetNorthBorderIndex(float3 localPosition)
+{
+	int x = (int)localPosition.x;
+	int y = (int)localPosition.y;
+	int index = x + (y * sizeOfChunk);
+	return index;
+}
+
+int GetEastBorderIndex(float3 localPosition)
+{
+	int y = (int)localPosition.y;
+	int z = (int)localPosition.z;
+	int offset = sizeOfChunk * chunkHeight;
+	int index = z + (y * sizeOfChunk) + offset;
+	return index;
+}
+
+int GetSouthBorderIndex(float3 localPosition)
+{
+	int x = (int)localPosition.x;
+	int y = (int)localPosition.y;
+	int offset = sizeOfChunk * chunkHeight * 2;
+	int index = x + (y * sizeOfChunk) + offset;
+	return index;
+}
+
+int GetWestBorderIndex(float3 localPosition)
+{
+	int y = (int)localPosition.y;
+	int z = (int)localPosition.z;
+	int offset = sizeOfChunk * chunkHeight * 3;
+	int index = z + (y * sizeOfChunk) + offset;
+	return index;
+}
+
+bool IsOpaque(int blockType)
+{
+	if (blockType >= minimum_opaque_block_number)
+		return true;
+	else
+		return false;
+}
+
+void RenderNorthFace(uint3 id)
+{
+	indices[id.x * 36 + (0 + subMeshIndexCount[id.x])] = 4;
+	indices[id.x * 36 + (1 + subMeshIndexCount[id.x])] = 7;
+	indices[id.x * 36 + (2 + subMeshIndexCount[id.x])] = 6;
+	indices[id.x * 36 + (3 + subMeshIndexCount[id.x])] = 6;
+	indices[id.x * 36 + (4 + subMeshIndexCount[id.x])] = 5;
+	indices[id.x * 36 + (5 + subMeshIndexCount[id.x])] = 4;
+	subMeshIndexCount[id.x] += 6;
+}
+void RenderEastFace(uint3 id)
+{
+	indices[id.x * 36 + (0 + subMeshIndexCount[id.x])] = 1;
+	indices[id.x * 36 + (1 + subMeshIndexCount[id.x])] = 2;
+	indices[id.x * 36 + (2 + subMeshIndexCount[id.x])] = 7;
+	indices[id.x * 36 + (3 + subMeshIndexCount[id.x])] = 7;
+	indices[id.x * 36 + (4 + subMeshIndexCount[id.x])] = 4;
+	indices[id.x * 36 + (5 + subMeshIndexCount[id.x])] = 1;
+	subMeshIndexCount[id.x] += 6;
+}
+void RenderSouthFace(uint3 id)
+{
+	indices[id.x * 36 + (0 + subMeshIndexCount[id.x])] = 0;
+	indices[id.x * 36 + (1 + subMeshIndexCount[id.x])] = 3;
+	indices[id.x * 36 + (2 + subMeshIndexCount[id.x])] = 2;
+	indices[id.x * 36 + (3 + subMeshIndexCount[id.x])] = 2;
+	indices[id.x * 36 + (4 + subMeshIndexCount[id.x])] = 1;
+	indices[id.x * 36 + (5 + subMeshIndexCount[id.x])] = 0;
+	subMeshIndexCount[id.x] += 6;
+}
+void RenderWestFace(uint3 id)
+{
+	indices[id.x * 36 + (0 + subMeshIndexCount[id.x])] = 5;
+	indices[id.x * 36 + (1 + subMeshIndexCount[id.x])] = 6;
+	indices[id.x * 36 + (2 + subMeshIndexCount[id.x])] = 3;
+	indices[id.x * 36 + (3 + subMeshIndexCount[id.x])] = 3;
+	indices[id.x * 36 + (4 + subMeshIndexCount[id.x])] = 0;
+	indices[id.x * 36 + (5 + subMeshIndexCount[id.x])] = 5;
+	subMeshIndexCount[id.x] += 6;
+}
+void RenderUpFace(uint3 id)
+{
+	indices[id.x * 36 + (0 + subMeshIndexCount[id.x])] = 3;
+	indices[id.x * 36 + (1 + subMeshIndexCount[id.x])] = 6;
+	indices[id.x * 36 + (2 + subMeshIndexCount[id.x])] = 7;
+	indices[id.x * 36 + (3 + subMeshIndexCount[id.x])] = 7;
+	indices[id.x * 36 + (4 + subMeshIndexCount[id.x])] = 2;
+	indices[id.x * 36 + (5 + subMeshIndexCount[id.x])] = 3;
+	subMeshIndexCount[id.x] += 6;
+}
+void RenderDownFace(uint3 id)
+{
+	indices[id.x * 36 + (0 + subMeshIndexCount[id.x])] = 5;
+	indices[id.x * 36 + (1 + subMeshIndexCount[id.x])] = 0;
+	indices[id.x * 36 + (2 + subMeshIndexCount[id.x])] = 1;
+	indices[id.x * 36 + (3 + subMeshIndexCount[id.x])] = 1;
+	indices[id.x * 36 + (4 + subMeshIndexCount[id.x])] = 4;
+	indices[id.x * 36 + (5 + subMeshIndexCount[id.x])] = 5;
+	subMeshIndexCount[id.x] += 6;
+}
+
+[numthreads(64,1,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+	subMeshIndexCount[id.x] = 0;
+	if (blockInfo[id.x].blockType == 0)
+		subMeshIndexCount[id.x] = 0;
+	else
+	{
+		subMeshIndexCount[id.x] = 0;
+
+		//Check faces
+		int northIndex = GetIndexOfBlockUsingLocalPosition(float3(blockInfo[id.x].localChunkBlockPosition.x, blockInfo[id.x].localChunkBlockPosition.y, blockInfo[id.x].localChunkBlockPosition.z + 1));
+		int eastIndex = GetIndexOfBlockUsingLocalPosition(float3(blockInfo[id.x].localChunkBlockPosition.x + 1, blockInfo[id.x].localChunkBlockPosition.y, blockInfo[id.x].localChunkBlockPosition.z));
+		int southIndex = GetIndexOfBlockUsingLocalPosition(float3(blockInfo[id.x].localChunkBlockPosition.x, blockInfo[id.x].localChunkBlockPosition.y, blockInfo[id.x].localChunkBlockPosition.z - 1));
+		int westIndex = GetIndexOfBlockUsingLocalPosition(float3(blockInfo[id.x].localChunkBlockPosition.x - 1, blockInfo[id.x].localChunkBlockPosition.y, blockInfo[id.x].localChunkBlockPosition.z));
+		int upIndex = GetIndexOfBlockUsingLocalPosition(float3(blockInfo[id.x].localChunkBlockPosition.x, blockInfo[id.x].localChunkBlockPosition.y + 1, blockInfo[id.x].localChunkBlockPosition.z));
+		int downIndex = GetIndexOfBlockUsingLocalPosition(float3(blockInfo[id.x].localChunkBlockPosition.x, blockInfo[id.x].localChunkBlockPosition.y - 1, blockInfo[id.x].localChunkBlockPosition.z));
+
+		//Render Faces
+		//If neighbor block is in chunk
+		if (northIndex >= 0 && northIndex < blocksCount)
+		{
+			if (IsOpaque(blockInfo[northIndex].blockType) == false)
+				RenderNorthFace(id);
+		}
+		//If neighbor block is in neighbor chunk
+		else if (northIndex == -1)
+		{
+			int northBorderIndex = GetNorthBorderIndex(blockInfo[id.x].localChunkBlockPosition);
+			if (IsOpaque(borderBlockInfo[northBorderIndex].blockType) == false)
+				RenderNorthFace(id);
+		}
+		
+		if (eastIndex >= 0 && eastIndex < blocksCount)
+		{
+			if (IsOpaque(blockInfo[eastIndex].blockType) == false)
+				RenderEastFace(id);
+		}
+		else if (eastIndex == -1)
+		{
+			int eastBorderIndex = GetEastBorderIndex(blockInfo[id.x].localChunkBlockPosition);
+			if (IsOpaque(borderBlockInfo[eastBorderIndex].blockType) == false)
+				RenderEastFace(id);
+		}
+
+		if (southIndex >= 0 && southIndex < blocksCount)
+		{
+			if (IsOpaque(blockInfo[southIndex].blockType) == false)
+				RenderSouthFace(id);
+		}
+		else if (southIndex == -1)
+		{
+			int southBorderIndex = GetSouthBorderIndex(blockInfo[id.x].localChunkBlockPosition);
+			if (IsOpaque(borderBlockInfo[southBorderIndex].blockType) == false)
+				RenderSouthFace(id);
+		}
+		
+		if (westIndex >= 0 && westIndex < blocksCount)
+		{
+			if (IsOpaque(blockInfo[westIndex].blockType) == false)
+				RenderWestFace(id);
+		}
+		else if (westIndex == -1)
+		{
+			int westBorderIndex = GetWestBorderIndex(blockInfo[id.x].localChunkBlockPosition);
+			if (IsOpaque(borderBlockInfo[westBorderIndex].blockType) == false)
+				RenderWestFace(id);
+		}
+
+		if (upIndex >= 0 && upIndex < blocksCount)
+		{
+			if (IsOpaque(blockInfo[upIndex].blockType) == false)
+				RenderUpFace(id);
+		}
+
+		if (downIndex >= 0 && downIndex < blocksCount)
+		{
+			if (IsOpaque(blockInfo[downIndex].blockType) == false)
+				RenderDownFace(id);
+		}
+
+		if (subMeshIndexCount[id.x] > 0)
+		{
+			vertices[id.x * 8 + 0] = float3(-0.5f, -0.5f, -0.5f) + blockInfo[id.x].localChunkBlockPosition - float3(7.5f, 0, 7.5f);
+			vertices[id.x * 8 + 1] = float3(0.5f, -0.5f, -0.5f) + blockInfo[id.x].localChunkBlockPosition - float3(7.5f, 0, 7.5f);
+			vertices[id.x * 8 + 2] = float3(0.5f, 0.5f, -0.5f) + blockInfo[id.x].localChunkBlockPosition - float3(7.5f, 0, 7.5f);
+			vertices[id.x * 8 + 3] = float3(-0.5f, 0.5f, -0.5f) + blockInfo[id.x].localChunkBlockPosition - float3(7.5f, 0, 7.5f);
+			vertices[id.x * 8 + 4] = float3(0.5f, -0.5f, 0.5f) + blockInfo[id.x].localChunkBlockPosition - float3(7.5f, 0, 7.5f);
+			vertices[id.x * 8 + 5] = float3(-0.5f, -0.5f, 0.5f) + blockInfo[id.x].localChunkBlockPosition - float3(7.5f, 0, 7.5f);
+			vertices[id.x * 8 + 6] = float3(-0.5f, 0.5f, 0.5f) + blockInfo[id.x].localChunkBlockPosition - float3(7.5f, 0, 7.5f);
+			vertices[id.x * 8 + 7] = float3(0.5f, 0.5f, 0.5f) + blockInfo[id.x].localChunkBlockPosition - float3(7.5f, 0, 7.5f);
+
+			normals[id.x * 8 + 0] = float3(-0.5f, -0.5f, -0.5f);
+			normals[id.x * 8 + 1] = float3(0.5f, -0.5f, -0.5f);
+			normals[id.x * 8 + 2] = float3(0.5f, 0.5f, -0.5f);
+			normals[id.x * 8 + 3] = float3(-0.5f, 0.5f, -0.5f);
+			normals[id.x * 8 + 4] = float3(0.5f, -0.5f, 0.5f);
+			normals[id.x * 8 + 5] = float3(-0.5f, -0.5f, 0.5f);
+			normals[id.x * 8 + 6] = float3(-0.5f, 0.5f, 0.5f);
+			normals[id.x * 8 + 7] = float3(0.5f, 0.5f, 0.5f);
+		}
+	}
+}
